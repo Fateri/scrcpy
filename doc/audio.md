@@ -24,6 +24,14 @@ To disable audio:
 scrcpy --no-audio
 ```
 
+## Audio only
+
+To play audio only, disable the video:
+
+```
+scrcpy --no-video
+```
+
 ## Codec
 
 The audio codec can be selected. The possible values are `opus` (default), `aac`

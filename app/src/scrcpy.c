@@ -345,6 +345,7 @@ scrcpy(struct scrcpy_options *options) {
         .lock_video_orientation = options->lock_video_orientation,
         .control = options->control,
         .display_id = options->display_id,
+        .video = options->video,
         .audio = options->audio,
         .show_touches = options->show_touches,
         .stay_awake = options->stay_awake,
@@ -436,11 +437,13 @@ scrcpy(struct scrcpy_options *options) {
         file_pusher_initialized = true;
     }
 
-    static const struct sc_demuxer_callbacks video_demuxer_cbs = {
-        .on_ended = sc_video_demuxer_on_ended,
-    };
-    sc_demuxer_init(&s->video_demuxer, "video", s->server.video_socket,
-                    &video_demuxer_cbs, NULL);
+    if (options->video) {
+        static const struct sc_demuxer_callbacks video_demuxer_cbs = {
+            .on_ended = sc_video_demuxer_on_ended,
+        };
+        sc_demuxer_init(&s->video_demuxer, "video", s->server.video_socket,
+                        &video_demuxer_cbs, NULL);
+    }
 
     if (options->audio) {
         static const struct sc_demuxer_callbacks audio_demuxer_cbs = {
@@ -471,8 +474,8 @@ scrcpy(struct scrcpy_options *options) {
             .on_ended = sc_recorder_on_ended,
         };
         if (!sc_recorder_init(&s->recorder, options->record_filename,
-                              options->record_format, options->audio,
-                              &recorder_cbs, NULL)) {
+                              options->record_format, options->video,
+                              options->audio, &recorder_cbs, NULL)) {
             goto end;
         }
         recorder_initialized = true;
@@ -482,8 +485,10 @@ scrcpy(struct scrcpy_options *options) {
         }
         recorder_started = true;
 
-        sc_packet_source_add_sink(&s->video_demuxer.packet_source,
-                                  &s->recorder.video_packet_sink);
+        if (options->video) {
+            sc_packet_source_add_sink(&s->video_demuxer.packet_source,
+                                      &s->recorder.video_packet_sink);
+        }
         if (options->audio) {
             sc_packet_source_add_sink(&s->audio_demuxer.packet_source,
                                       &s->recorder.audio_packet_sink);
@@ -713,12 +718,15 @@ aoa_hid_end:
     }
 #endif
 
-    // now we consumed the header values, the socket receives the video stream
-    // start the video demuxer
-    if (!sc_demuxer_start(&s->video_demuxer)) {
-        goto end;
+    // Now that the header values have been consumed, the socket(s) will
+    // receive the stream(s). Start the demuxer(s).
+
+    if (options->video) {
+        if (!sc_demuxer_start(&s->video_demuxer)) {
+            goto end;
+        }
+        video_demuxer_started = true;
     }
-    video_demuxer_started = true;
 
     if (options->audio) {
         if (!sc_demuxer_start(&s->audio_demuxer)) {
